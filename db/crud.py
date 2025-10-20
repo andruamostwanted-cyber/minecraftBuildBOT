@@ -65,7 +65,7 @@ class BuildCRUD:
             if difficulty:
                 stmt = stmt.where(Build.difficulty == difficulty)
                 
-            stmt = stmt.limit(limit)
+            stmt = stmt.order_by(func.random()).limit(limit)
             result = await session.execute(stmt)
             return result.scalars().all()
     
