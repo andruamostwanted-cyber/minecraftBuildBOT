@@ -4,7 +4,7 @@ def get_main_keyboard():
     """Основная клавиатура меню"""
     keyboard = [
         [types.KeyboardButton(text="🎲 Случайная сборка"), types.KeyboardButton(text="🔍 Подбор по фильтрам")],
-        [types.KeyboardButton(text="➕ Добавить сборку"), types.KeyboardButton(text="📊 Топ сборок")],
+        [types.KeyboardButton(text="🏗️ Показать постройки"), types.KeyboardButton(text="📊 Топ сборок")],
         [types.KeyboardButton(text="📞 Связаться с нами")]
     ]
     return types.ReplyKeyboardMarkup(
@@ -146,7 +146,7 @@ def get_admin_keyboard():
 def get_admin_builds_keyboard():
     """Клавиатура управления сборками"""
     keyboard = [
-        [types.KeyboardButton(text="👁️ Просмотр всех сборок")],
+        [types.KeyboardButton(text="👁️ Просмотр всех сборок"), types.KeyboardButton(text="📋 Список построек")],
         [types.KeyboardButton(text="➕ Добавить сборку (admin)")],
         [types.KeyboardButton(text="❌ Удалить сборку")],
         [types.KeyboardButton(text="⬅️ Назад в админку")]
@@ -237,3 +237,19 @@ def get_rating_stats_keyboard(build_id: int):
         [types.InlineKeyboardButton(text="⬅️ Назад к сборке", callback_data=f"back_to_build_{build_id}")],
     ]
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_showcase_keyboard(build_id: int):
+    """Клавиатура для показа построек"""
+    keyboard = [
+        [types.InlineKeyboardButton(text="❤️ Лайк", callback_data=f"like_build_{build_id}")],
+        [types.InlineKeyboardButton(text="➡️ Дальше", callback_data="next_showcase")],
+        [types.InlineKeyboardButton(text="📤 Добавить свою", callback_data="add_showcase")],
+    ]
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_cancel_keyboard():
+    """Клавиатура отмены"""
+    keyboard = [
+        [types.KeyboardButton(text="❌ Отменить")],
+    ]
+    return types.ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)

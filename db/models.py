@@ -136,3 +136,22 @@ class BotStats(Base):
     new_users = Column(Integer, default=0)
     active_users = Column(Integer, default=0)
     total_actions = Column(Integer, default=0)
+
+
+class BuildShowcase(Base):
+    __tablename__ = "build_showcase"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    image_url = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    likes_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class BuildLike(Base):
+    __tablename__ = "build_likes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    build_id = Column(Integer, ForeignKey('build_showcase.id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

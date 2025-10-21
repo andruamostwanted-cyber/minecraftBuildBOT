@@ -1,6 +1,6 @@
 from sqlalchemy import select, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.models import Build, BuildType, BuildStyle, Difficulty, Vote, UserActivity
+from db.models import Build, BuildType, BuildStyle, Difficulty, Vote, UserActivity, BuildLike, BuildShowcase
 from db.session import async_session
 
 from datetime import datetime, date
@@ -378,5 +378,74 @@ class AnalyticsCRUD:
             return user_ids
 
 
+class ShowcaseCRUD:
+    @staticmethod
+    async def add_build_showcase(user_id: int, image_url: str, description: str = None):
+        """Добавить постройку в showcase"""
+        async with async_session() as session:
+            build = BuildShowcase(
+                user_id=user_id,
+                image_url=image_url,
+                description=description
+            )
+            session.add(build)
+            await session.commit()
+            return build
+    
+    @staticmethod
+    async def get_random_showcase():
+        """Получить случайную постройку"""
+        async with async_session() as session:
+            stmt = select(BuildShowcase).order_by(func.random()).limit(1)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+    
+    @staticmethod
+    async def like_build(build_id: int, user_id: int):
+        """Поставить лайк постройке"""
+        async with async_session() as session:
+            # Проверяем не лайкал ли уже
+            existing = await session.execute(
+                select(BuildLike).where(
+                    BuildLike.build_id == build_id,
+                    BuildLike.user_id == user_id
+                )
+            )
+            if existing.scalar_one_or_none():
+                return False
+            
+            # Добавляем лайк
+            like = BuildLike(build_id=build_id, user_id=user_id)
+            session.add(like)
+            
+            # Обновляем счетчик
+            build = await session.get(BuildShowcase, build_id)
+            if build:
+                build.likes_count += 1
+            
+            await session.commit()
+            return True
+
+    @staticmethod
+    async def get_all_showcases():
+        """Получить все постройки для админки"""
+        async with async_session() as session:
+            stmt = select(BuildShowcase).order_by(BuildShowcase.id.desc())
+            result = await session.execute(stmt)
+            return result.scalars().all()
+    
+    @staticmethod
+    async def delete_showcase(build_id: int):
+        """Удалить постройку"""
+        async with async_session() as session:
+            build = await session.get(BuildShowcase, build_id)
+            if build:
+                await session.delete(build)
+                await session.commit()
+                return True
+            return False
+
+
 build_crud = BuildCRUD()
 analytics_crud = AnalyticsCRUD()
+showcase_crud = ShowcaseCRUD()

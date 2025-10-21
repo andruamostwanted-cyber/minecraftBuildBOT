@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from config import ADMIN_IDS
-from db.crud import build_crud, analytics_crud
+from db.crud import build_crud, analytics_crud, showcase_crud
 from db.models import BuildType, BuildStyle, Difficulty, BUILD_TYPE_MAP, STYLE_MAP, DIFFICULTY_MAP
 from keyboards import get_admin_keyboard, get_admin_builds_keyboard, get_admin_moderation_keyboard
 
@@ -547,3 +547,70 @@ async def process_newsletter(message: types.Message, state: FSMContext):
     )
     
     await state.clear()
+
+@admin_router.message(F.text == "⏳ Модерация", admin_filter)
+async def moderation_handler(message: types.Message):
+    """Панель модерации"""
+    await message.answer(
+        "⏳ <b>Панель модерации</b>\n\n"
+        "Управление пользовательским контентом:",
+        reply_markup=get_admin_moderation_keyboard(),
+        parse_mode="HTML"
+    )
+
+# Обработчик списка построек
+@admin_router.message(F.text == "📋 Список построек", admin_filter)
+async def showcase_list_handler(message: types.Message):
+    """Показать список всех построек"""
+    showcases = await showcase_crud.get_all_showcases()
+    
+    if not showcases:
+        await message.answer("❌ В базе нет построек")
+        return
+    
+    text = "🏗️ <b>Список построек:</b>\n\n"
+    
+    for showcase in showcases:
+        text += f"🆔 <b>ID {showcase.id}:</b>\n"
+        text += f"   👤 User: {showcase.user_id}\n"
+        text += f"   ❤️ Лайков: {showcase.likes_count}\n"
+        text += f"   📅 Дата: {showcase.created_at.strftime('%d.%m.%Y')}\n"
+        
+        if showcase.description:
+            desc = showcase.description[:50] + "..." if len(showcase.description) > 50 else showcase.description
+            text += f"   📝 {desc}\n"
+        
+        text += f"   🗑️ Удалить: <code>/delete_showcase {showcase.id}</code>\n\n"
+    
+    text += "💡 <i>Для удаления используй команду с ID</i>"
+    
+    await message.answer(text, parse_mode="HTML")
+
+# Команда удаления постройки
+@admin_router.message(Command("delete_showcase"), admin_filter)
+async def delete_showcase_command(message: types.Message):
+    """Удалить постройку по ID"""
+    try:
+        parts = message.text.split()
+        if len(parts) < 2:
+            await message.answer(
+                "❌ <b>Неверный формат</b>\n\n"
+                "Используй: <code>/delete_showcase ID_постройки</code>\n"
+                "Пример: <code>/delete_showcase 1</code>",
+                parse_mode="HTML"
+            )
+            return
+        
+        build_id = int(parts[1])
+        success = await showcase_crud.delete_showcase(build_id)
+        
+        if success:
+            await message.answer(f"✅ Постройка ID {build_id} удалена")
+        else:
+            await message.answer(f"❌ Постройка с ID {build_id} не найдена")
+            
+    except ValueError:
+        await message.answer("❌ ID должен быть числом")
+    except Exception as e:
+        logging.error(f"Error deleting showcase: {e}")
+        await message.answer("❌ Ошибка при удалении")

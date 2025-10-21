@@ -12,13 +12,16 @@ from keyboards import (
     get_difficulty_keyboard,
     get_search_results_keyboard,
     get_rating_keyboard,
-    get_rating_stats_keyboard
+    get_rating_stats_keyboard,
+    get_cancel_keyboard,
+    get_showcase_keyboard
 )
 
 from filters import UserFilters
 
 from db.crud import build_crud, analytics_crud
 from db.models import BuildType, BuildStyle, Difficulty, BUILD_TYPE_MAP, STYLE_MAP, DIFFICULTY_MAP
+from db.crud import showcase_crud
 
 
 # Создаем роутер
@@ -26,6 +29,10 @@ router = Router()
 
 class FilterStates(StatesGroup):
     waiting_for_filters = State()
+
+class ShowcaseStates(StatesGroup):
+    waiting_showcase_image = State()
+    waiting_showcase_description = State()
 
 # Создаем роутер
 router = Router()
@@ -653,3 +660,125 @@ async def back_to_build_callback(callback: types.CallbackQuery):
         logging.error(f"Error returning to build: {e}")
         await callback.answer("❌ Ошибка при возврате к сборке", show_alert=True)
 
+# Команда для просмотра построек
+@router.message(F.text == "🏗️ Показать постройки")
+async def showcase_handler(message: types.Message):
+    """Показать случайную постройку"""
+    build = await showcase_crud.get_random_showcase()
+    
+    if not build:
+        keyboard = [
+            [types.InlineKeyboardButton(text="📤 Добавить первую постройку", callback_data="add_showcase")]
+        ]
+        reply_markup = types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+        await message.answer(
+            "🏗️ <b>Пока нет построек</b>\n\n"
+            "Будь первым - добавь свою крутую постройку!",
+            parse_mode="HTML",
+            reply_markup=reply_markup
+        )
+        return
+    
+    text = f"🏗️ <b>Постройка от пользователя</b>\n"
+    if build.description:
+        text += f"\n{build.description}\n"
+    text += f"\n❤️ <b>Лайков:</b> {build.likes_count}"
+    
+    await message.answer_photo(
+        photo=build.image_url,
+        caption=text,
+        reply_markup=get_showcase_keyboard(build.id)
+    )
+
+# Callback для лайка
+@router.callback_query(F.data.startswith("like_build_"))
+async def like_build_callback(callback: types.CallbackQuery):
+    """Обработчик лайка постройки"""
+    build_id = int(callback.data.replace("like_build_", ""))
+    
+    success = await showcase_crud.like_build(build_id, callback.from_user.id)
+    
+    if success:
+        await callback.answer("❤️ Лайк поставлен!")
+    else:
+        await callback.answer("❌ Вы уже лайкали эту постройку")
+
+# Callback для следующей постройки
+@router.callback_query(F.data == "next_showcase")
+async def next_showcase_callback(callback: types.CallbackQuery):
+    """Показать следующую постройку"""
+    build = await showcase_crud.get_random_showcase()
+    
+    if build:
+        text = f"🏗️ <b>Постройка от пользователя</b>\n"
+        if build.description:
+            text += f"\n{build.description}\n"
+        text += f"\n❤️ <b>Лайков:</b> {build.likes_count}"
+        
+        await callback.message.answer_photo(photo=build.image_url, caption=text, parse_mode="HTML", reply_markup=get_showcase_keyboard(build.id))
+        
+    else:
+        await callback.answer("❌ Больше построек нет")
+    
+    await callback.answer()
+
+# Начало добавления постройки
+@router.callback_query(F.data == "add_showcase")
+async def add_showcase_start(callback: types.CallbackQuery, state: FSMContext):
+    """Начать процесс добавления постройки"""
+    await callback.message.answer(
+        "🏗️ <b>Добавление постройки</b>\n\n"
+        "Отправь ссылку на изображение твоей постройки:",
+        reply_markup=get_cancel_keyboard(),
+        parse_mode="HTML"
+    )
+    await state.set_state(ShowcaseStates.waiting_showcase_image)
+    await callback.answer()
+
+# Обработчик изображения
+@router.message(ShowcaseStates.waiting_showcase_image)
+async def process_showcase_image(message: types.Message, state: FSMContext):
+    """Обработка изображения постройки"""
+    if message.text == "❌ Отменить":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_main_keyboard())
+        return
+    
+    if not message.text.startswith(('http://', 'https://')):
+        await message.answer("❌ Это не ссылка! Отправь прямую ссылку на изображение")
+        return
+    
+    await state.update_data(image_url=message.text)
+    await message.answer(
+        "📝 Теперь добавь описание (или отправь 'пропустить'):",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(ShowcaseStates.waiting_showcase_description)
+
+# Обработчик описания
+@router.message(ShowcaseStates.waiting_showcase_description)
+async def process_showcase_description(message: types.Message, state: FSMContext):
+    """Обработка описания постройки"""
+    if message.text == "❌ Отменить":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_main_keyboard())
+        return
+    
+    user_data = await state.get_data()
+    description = None if message.text.lower() == "пропустить" else message.text
+    
+    # Сохраняем постройку
+    build = await showcase_crud.add_build_showcase(
+        user_id=message.from_user.id,
+        image_url=user_data['image_url'],
+        description=description
+    )
+    
+    await message.answer(
+        "✅ <b>Постройка добавлена!</b>\n\n"
+        "Теперь другие пользователи смогут её оценить ❤️",
+        reply_markup=get_main_keyboard(),
+        parse_mode="HTML",
+    )
+    await state.clear()
